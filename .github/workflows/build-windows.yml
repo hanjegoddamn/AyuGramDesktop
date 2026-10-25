@@ -16,6 +16,12 @@ jobs:
         shell: cmd
 
     steps:
+      - name: Disable Windows Defender
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Set-MpPreference -ExclusionPath "C:\", "$env:GITHUB_WORKSPACE", "C:\Users\runneradmin"
+        shell: powershell
+
       - name: Prepare directories
         run: |
           mkdir %userprofile%\TBuild\Libraries
@@ -38,14 +44,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Cache Libraries
-        id: cache-libs
-        uses: actions/cache@v4
+      - name: Restore Libraries Cache
+        uses: actions/cache/restore@v4
         with:
           path: |
-            %userprofile%\TBuild\Libraries\win64
-            %userprofile%\TBuild\ThirdParty
-          key: ${{ runner.os }}-x64-tdesktop-libs-${{ hashFiles('**/Telegram/build/prepare/prepare.py') }}
+            C:/Users/runneradmin/TBuild/Libraries/win64
+            C:/Users/runneradmin/TBuild/ThirdParty
+            C:/Users/runneradmin/TBuild/cache_keys
+          key: ${{ runner.os }}-x64-tdesktop-libs-${{ hashFiles('**/Telegram/build/prepare/**') }}
           restore-keys: |
             ${{ runner.os }}-x64-tdesktop-libs-
 
@@ -54,14 +60,24 @@ jobs:
           cd %GITHUB_WORKSPACE%\TBuild\AyuGramDesktop\Telegram
           build\prepare\win.bat skip-release silent qt6
 
+      - name: Save Libraries Cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            C:/Users/runneradmin/TBuild/Libraries/win64
+            C:/Users/runneradmin/TBuild/ThirdParty
+            C:/Users/runneradmin/TBuild/cache_keys
+          key: ${{ runner.os }}-x64-tdesktop-libs-${{ hashFiles('**/Telegram/build/prepare/**') }}
+
       - name: Configure
         run: |
           cd %GITHUB_WORKSPACE%\TBuild\AyuGramDesktop\Telegram
-          call configure.bat x64 qt6 -D TDESKTOP_API_TEST=ON -D CMAKE_CONFIGURATION_TYPES=Debug -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF
+          call configure.bat x64 qt6 -D TDESKTOP_API_TEST=ON -D CMAKE_CONFIGURATION_TYPES=Debug -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF -D CMAKE_POLICY_DEFAULT_CMP0141=NEW -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -D CMAKE_CXX_FLAGS_DEBUG="/Z7" -D CMAKE_C_FLAGS_DEBUG="/Z7"
 
       - name: Build Telegram
         run: |
-          cmake --build %GITHUB_WORKSPACE%\TBuild\AyuGramDesktop\out --config Debug --target Telegram -j 4
+          cmake --build %GITHUB_WORKSPACE%\TBuild\AyuGramDesktop\out --config Debug --target Telegram
 
       - name: Upload Telegram.exe
         uses: actions/upload-artifact@v4
