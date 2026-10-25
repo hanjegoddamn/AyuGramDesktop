@@ -53,6 +53,8 @@
 #include "ui/text/text_entity.h"
 #include "ui/toast/toast.h"
 #include "window/window_controller.h"
+#include "window/window_session_controller.h"
+#include "chat_helpers/message_field.h"
 
 #include <atomic>
 #include <functional>
@@ -1606,4 +1608,114 @@ void applyGhostScheduling(
 		return;
 	}
 	applyGhostScheduling(session, action.options, delaySeconds);
+}
+
+bool CheckAndHandleSavedSend(
+		Window::SessionController *controller,
+		not_null<PeerData*> peer,
+		const TextWithTags &textWithTags,
+		Fn<void()> clearInput) {
+	if (!controller || !peer->isSelf()) {
+		return false;
+	}
+	const auto text = textWithTags.text.trimmed();
+	if (!text.startsWith(u"/send "_q)) {
+		return false;
+	}
+	clearInput();
+
+	const auto rest = text.mid(6).trimmed();
+	const auto spaceIndex = rest.indexOf(' ');
+	if (spaceIndex <= 0) {
+		controller->showToast(u"Usage: /send @username <message>"_q);
+		return true;
+	}
+
+	auto username = rest.left(spaceIndex).trimmed();
+	const auto messageText = rest.mid(spaceIndex + 1).trimmed();
+	if (username.startsWith('@')) {
+		username = username.mid(1);
+	}
+	if (username.isEmpty() || messageText.isEmpty()) {
+		controller->showToast(u"Usage: /send @username <message>"_q);
+		return true;
+	}
+
+	const auto session = &controller->session();
+	const auto addFakeIncoming = [=](not_null<PeerData*> target) {
+		const auto history = session->data().history(target);
+		history->addNewLocalMessage({
+			.id = session->data().nextLocalMessageId(),
+			.flags = (MessageFlag::HistoryEntry | MessageFlag::HasFromId),
+			.from = target->id,
+			.date = base::unixtime::now(),
+		}, TextWithEntities{ .text = messageText }, MTP_messageMediaEmpty());
+
+		session->changes().historyUpdated(
+			history,
+			Data::HistoryUpdate::Flag::NewMessage);
+		controller->showPeerHistory(target, Window::SectionShow::Way::Forward);
+	};
+
+	if (const auto cached = session->data().peerByUsername(username)) {
+		addFakeIncoming(cached);
+		return true;
+	}
+
+	session->api().request(MTPcontacts_ResolveUsername(
+		MTP_flags(0),
+		MTP_string(username),
+		MTP_string()
+	)).done([=](const MTPcontacts_ResolvedPeer &result) {
+		if (result.type() == mtpc_contacts_resolvedPeer) {
+			const auto &data = result.c_contacts_resolvedPeer();
+			session->data().processUsers(data.vusers());
+			session->data().processChats(data.vchats());
+			if (const auto target = session->data().peerLoaded(peerFromMTP(data.vpeer()))) {
+				addFakeIncoming(target);
+				return;
+			}
+		}
+		controller->showToast(u"User not found"_q);
+	}).fail([=](const MTP::Error &) {
+		controller->showToast(u"User not found"_q);
+	}).send();
+
+	return true;
+}
+
+bool CheckAndHandleVisualPaidReply(
+		not_null<PeerData*> peer,
+		not_null<History*> history,
+		const TextWithTags &textWithTags,
+		FullReplyTo replyTo,
+		Fn<void()> clearAndFinish) {
+	if (peer->starsPerMessageChecked() <= 0) {
+		return false;
+	}
+
+	auto flags = MessageFlag::HistoryEntry
+		| MessageFlag::Outgoing
+		| MessageFlag::HasFromId;
+	if (replyTo.messageId) {
+		flags |= MessageFlag::HasReplyInfo;
+	}
+
+	history->addNewLocalMessage({
+		.id = history->owner().nextLocalMessageId(),
+		.flags = flags,
+		.from = history->session().userPeerId(),
+		.replyTo = replyTo,
+		.date = base::unixtime::now(),
+	}, TextWithEntities{
+		.text = textWithTags.text,
+		.entities = TextUtilities::ConvertTextTagsToEntities(textWithTags.tags),
+	}, MTP_messageMediaEmpty());
+
+	history->session().changes().historyUpdated(
+		history,
+		Data::HistoryUpdate::Flag::MessageSent);
+
+	clearAndFinish();
+	return true;
 }
