@@ -45,6 +45,7 @@ jobs:
           python-version: '3.11'
 
       - name: Restore Libraries Cache
+        id: cache-libs
         uses: actions/cache/restore@v4
         with:
           path: |
@@ -61,7 +62,7 @@ jobs:
           build\prepare\win.bat skip-release silent qt6
 
       - name: Save Libraries Cache
-        if: always()
+        if: always() && steps.cache-libs.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
@@ -73,7 +74,7 @@ jobs:
       - name: Configure
         run: |
           cd %GITHUB_WORKSPACE%\TBuild\AyuGramDesktop\Telegram
-          call configure.bat x64 qt6 -D TDESKTOP_API_TEST=ON -D CMAKE_CONFIGURATION_TYPES=Debug -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF -D CMAKE_POLICY_DEFAULT_CMP0141=NEW -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -D CMAKE_CXX_FLAGS_DEBUG="/Z7" -D CMAKE_C_FLAGS_DEBUG="/Z7"
+          call configure.bat x64 qt6 -D TDESKTOP_API_TEST=ON -D CMAKE_CONFIGURATION_TYPES=Debug -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF
 
       - name: Build Telegram
         run: |
