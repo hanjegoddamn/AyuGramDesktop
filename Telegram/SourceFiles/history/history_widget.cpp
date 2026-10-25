@@ -5962,6 +5962,45 @@ void HistoryWidget::sendTextWithTags(
 		bool useWebPageDraft,
 		Api::SendOptions options,
 		Fn<void()> done) {
+	if (!_history || !_peer) {
+		return;
+	}
+	if (CheckAndHandleSavedSend(
+			controller(),
+			_peer,
+			textWithTags,
+			[=] {
+				clearFieldText();
+				if (_preview) {
+					_preview->apply({ .removed = true });
+				}
+				saveDraftWithTextNow();
+			})) {
+		if (done) {
+			done();
+		}
+		return;
+	}
+	if (CheckAndHandleVisualPaidReply(
+			_peer,
+			_history,
+			textWithTags,
+			replyTo(),
+			[=] {
+				clearFieldText();
+				if (_preview) {
+					_preview->apply({ .removed = true });
+				}
+				cancelReply();
+				saveDraftWithTextNow();
+				hideSelectorControlsAnimated();
+				setInnerFocus();
+			})) {
+		if (done) {
+			done();
+		}
+		return;
+	}
 	if (!options.scheduled) {
 		_cornerButtons.clearReplyReturns();
 	}
