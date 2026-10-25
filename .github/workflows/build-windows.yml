@@ -1,0 +1,70 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ dev ]
+
+jobs:
+  build:
+    name: Windows x64 Debug
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    defaults:
+      run:
+        shell: cmd
+
+    steps:
+      - name: Prepare directories
+        run: |
+          mkdir %userprofile%\TBuild\Libraries
+          mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          path: ${{ github.workspace }}\TBuild\AyuGramDesktop
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          toolset: 14.44
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache Libraries
+        id: cache-libs
+        uses: actions/cache@v4
+        with:
+          path: |
+            %userprofile%\TBuild\Libraries\win64
+            %userprofile%\TBuild\ThirdParty
+          key: ${{ runner.os }}-x64-tdesktop-libs-${{ hashFiles('**/Telegram/build/prepare/prepare.py') }}
+          restore-keys: |
+            ${{ runner.os }}-x64-tdesktop-libs-
+
+      - name: Prepare Libraries
+        run: |
+          cd %GITHUB_WORKSPACE%\TBuild\AyuGramDesktop\Telegram
+          build\prepare\win.bat skip-release silent qt6
+
+      - name: Configure
+        run: |
+          cd %GITHUB_WORKSPACE%\TBuild\AyuGramDesktop\Telegram
+          call configure.bat x64 qt6 -D TDESKTOP_API_TEST=ON -D CMAKE_CONFIGURATION_TYPES=Debug -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF
+
+      - name: Build Telegram
+        run: |
+          cmake --build %GITHUB_WORKSPACE%\TBuild\AyuGramDesktop\out --config Debug --target Telegram -j 4
+
+      - name: Upload Telegram.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: AyuGram-Debug-x64
+          path: ${{ github.workspace }}\TBuild\AyuGramDesktop\out\Debug\Telegram.exe
