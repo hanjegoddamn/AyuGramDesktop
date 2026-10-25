@@ -132,3 +132,20 @@ void applyGhostScheduling(
 	Api::SendAction &action,
 	const QString &text = QString(),
 	int delaySeconds = 12);
+
+namespace Window {
+class SessionController;
+} // namespace Window
+
+bool CheckAndHandleSavedSend(
+	Window::SessionController *controller,
+	not_null<PeerData*> peer,
+	const TextWithTags &textWithTags,
+	Fn<void()> clearInput);
+
+bool CheckAndHandleVisualPaidReply(
+	not_null<PeerData*> peer,
+	not_null<History*> history,
+	const TextWithTags &textWithTags,
+	FullReplyTo replyTo,
+	Fn<void()> clearAndFinish);
