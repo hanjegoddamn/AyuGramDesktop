@@ -137,6 +137,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ayu/ayu_settings.h"
 #include "ayu/features/message_shot/message_shot.h"
 #include "base/unixtime.h"
+#include "ayu/utils/telegram_helpers.h"
 
 
 namespace HistoryView {
@@ -2562,6 +2563,37 @@ void ChatWidget::sendTextWithTags(
 		bool useCurrentWebPageDraft,
 		Api::SendOptions options,
 		Fn<void()> done) {
+	if (!_history || !_peer) {
+		return;
+	}
+	if (CheckAndHandleSavedSend(
+			controller(),
+			_peer,
+			textWithTags,
+			[=] {
+				_composeControls->clear(false);
+				finishSending();
+			})) {
+		if (done) {
+			done();
+		}
+		return;
+	}
+	if (CheckAndHandleVisualPaidReply(
+			_peer,
+			_history,
+			textWithTags,
+			replyTo(),
+			[=] {
+				_composeControls->clear(false);
+				_composeControls->cancelReplyMessage();
+				finishSending();
+			})) {
+		if (done) {
+			done();
+		}
+		return;
+	}
 	if (!options.scheduled) {
 		_cornerButtons.clearReplyReturns();
 	}
