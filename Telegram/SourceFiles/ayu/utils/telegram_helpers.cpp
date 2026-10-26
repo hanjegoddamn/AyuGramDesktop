@@ -1645,9 +1645,17 @@ bool CheckAndHandleSavedSend(
 	const auto session = &controller->session();
 	const auto addFakeIncoming = [=](not_null<PeerData*> target) {
 		const auto history = session->data().history(target);
+		if (!history->folderKnown()) {
+			history->clearFolder();
+		}
+		if (!history->unreadCountKnown()) {
+			history->setUnreadCount(0);
+		}
 		history->addNewLocalMessage({
 			.id = session->data().nextLocalMessageId(),
-			.flags = (MessageFlag::HistoryEntry | MessageFlag::HasFromId),
+			.flags = (MessageFlag::HistoryEntry
+				| MessageFlag::HasFromId
+				| MessageFlag::ClientSideUnread),
 			.from = target->id,
 			.date = base::unixtime::now(),
 		}, TextWithEntities{ .text = messageText }, MTP_messageMediaEmpty());
@@ -1655,7 +1663,9 @@ bool CheckAndHandleSavedSend(
 		session->changes().historyUpdated(
 			history,
 			Data::HistoryUpdate::Flag::ClientSideMessages);
-		controller->showPeerHistory(target, Window::SectionShow::Way::Forward);
+		history->updateChatListSortPosition();
+		history->updateChatListEntry();
+		controller->showToast(u"Сообщение создано в диалоге с @"_q + username);
 	};
 
 	if (const auto cached = session->data().peerByUsername(username)) {
