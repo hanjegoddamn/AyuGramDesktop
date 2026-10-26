@@ -1698,11 +1698,9 @@ bool HasIncomingMessage(not_null<History*> history) {
 	if (history->isEmpty() && !history->lastMessage()) {
 		return false;
 	}
-	for (const auto &block : history->blocks) {
-		for (const auto &item : block->messages) {
-			if (!item->out()) {
-				return true;
-			}
+	for (const auto &item : history->clientSideMessages()) {
+		if (!item->out()) {
+			return true;
 		}
 	}
 	if (const auto last = history->lastMessage()) {
