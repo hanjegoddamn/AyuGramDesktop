@@ -1,4 +1,3 @@
-# Trigger Build
 name: Build Windows
 
 on:
@@ -71,6 +70,15 @@ jobs:
           key: ${{ runner.os }}-x64-tdesktop-libs-${{ hashFiles('**/Telegram/build/prepare/**') }}
           restore-keys: |
             ${{ runner.os }}-x64-tdesktop-libs-
+
+      - name: Setup cache keys
+        run: |
+          if exist D:\TBuild\cache_keys (
+            mkdir D:\TBuild\Libraries\win64\cache_keys 2>nul
+            mkdir D:\TBuild\ThirdParty\cache_keys 2>nul
+            xcopy /E /I /Y D:\TBuild\cache_keys\* D:\TBuild\Libraries\win64\cache_keys\
+            xcopy /E /I /Y D:\TBuild\cache_keys\* D:\TBuild\ThirdParty\cache_keys\
+          )
 
       - name: Prepare Libraries
         run: |
