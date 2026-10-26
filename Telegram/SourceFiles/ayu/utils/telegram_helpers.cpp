@@ -23,6 +23,7 @@
 #include "base/unixtime.h"
 #include "core/mime_type.h"
 #include "data/components/ephemeral_messages.h"
+#include "data/data_changes.h"
 #include "data/data_channel.h"
 #include "data/data_chat.h"
 #include "data/data_document.h"
@@ -1653,7 +1654,7 @@ bool CheckAndHandleSavedSend(
 
 		session->changes().historyUpdated(
 			history,
-			Data::HistoryUpdate::Flag::NewMessage);
+			Data::HistoryUpdate::Flag::ClientSideMessages);
 		controller->showPeerHistory(target, Window::SectionShow::Way::Forward);
 	};
 
