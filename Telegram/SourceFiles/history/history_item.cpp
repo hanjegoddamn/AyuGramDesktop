@@ -3371,7 +3371,7 @@ bool HistoryItem::canDeleteForEveryone(TimeId now) const {
 		: peer->isUser()
 		? (now - date() >= config.revokePrivateTimeLimit)
 		: (now - date() >= config.revokeTimeLimit);
-	if (!isRegular() || messageToMyself || messageTooOld || isPost()) {
+	if ((!isRegular() && !isLocal()) || messageToMyself || messageTooOld || isPost()) {
 		return false;
 	}
 	if (peer->isChannel()) {
@@ -3395,7 +3395,7 @@ bool HistoryItem::canDeleteForEveryone(TimeId now) const {
 				return false;
 			}
 		} else if (peer->isUser()) {
-			return config.revokePrivateInbox;
+			return isLocal() || config.revokePrivateInbox;
 		} else {
 			return false;
 		}
@@ -3404,7 +3404,7 @@ bool HistoryItem::canDeleteForEveryone(TimeId now) const {
 }
 
 bool HistoryItem::canBeSelected() const {
-	return (isRegular() || isEphemeral())
+	return (isRegular() || isEphemeral() || isLocal())
 		&& !isService()
 		&& !IsAnchoredEphemeral(this);
 }
