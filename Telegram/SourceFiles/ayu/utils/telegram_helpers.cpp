@@ -20,6 +20,7 @@
 #include "ayu/utils/rc_manager.h"
 #include "core/core_settings.h"
 #include "core/application.h"
+#include "base/call_delayed.h"
 #include "base/unixtime.h"
 #include "core/mime_type.h"
 #include "data/components/ephemeral_messages.h"
@@ -1611,6 +1612,109 @@ void applyGhostScheduling(
 	applyGhostScheduling(session, action.options, delaySeconds);
 }
 
+namespace {
+
+struct SendArgs {
+	QString username;
+	crl::time delayMs = 0;
+	QString delayStr;
+	QString text;
+};
+
+std::optional<SendArgs> ParseSendArgs(const QString &raw) {
+	const auto parts = raw.split(' ', Qt::SkipEmptyParts);
+	if (parts.size() < 2) {
+		return std::nullopt;
+	}
+	auto username = parts[0].trimmed();
+	if (username.startsWith('@')) {
+		username = username.mid(1);
+	}
+	if (username.isEmpty()) {
+		return std::nullopt;
+	}
+
+	auto textStartIndex = raw.indexOf(parts[0]) + parts[0].size();
+	while (textStartIndex < raw.size() && raw[textStartIndex].isSpace()) {
+		++textStartIndex;
+	}
+
+	const auto rest = raw.mid(textStartIndex).trimmed();
+	if (rest.isEmpty()) {
+		return std::nullopt;
+	}
+
+	if (parts.size() >= 3) {
+		const auto candidate = parts[1].trimmed();
+		auto isDelay = false;
+		auto delayMs = crl::time(0);
+		if (candidate.size() >= 2) {
+			const auto suffix = candidate.back().toLower();
+			const auto numPart = candidate.left(candidate.size() - 1);
+			auto ok = false;
+			const auto val = numPart.toLongLong(&ok);
+			if (ok && val > 0) {
+				if (suffix == 's') {
+					delayMs = val * crl::time(1000);
+					isDelay = true;
+				} else if (suffix == 'm') {
+					delayMs = val * crl::time(60 * 1000);
+					isDelay = true;
+				} else if (suffix == 'h') {
+					delayMs = val * crl::time(3600 * 1000);
+					isDelay = true;
+				} else if (suffix == 'd') {
+					delayMs = val * crl::time(86400 * 1000);
+					isDelay = true;
+				}
+			}
+		}
+		if (isDelay) {
+			auto msgStartIndex = raw.indexOf(candidate, textStartIndex) + candidate.size();
+			while (msgStartIndex < raw.size() && raw[msgStartIndex].isSpace()) {
+				++msgStartIndex;
+			}
+			const auto msgText = raw.mid(msgStartIndex).trimmed();
+			if (!msgText.isEmpty()) {
+				return SendArgs{
+					.username = username,
+					.delayMs = delayMs,
+					.delayStr = candidate,
+					.text = msgText,
+				};
+			}
+		}
+	}
+
+	return SendArgs{
+		.username = username,
+		.delayMs = 0,
+		.delayStr = QString(),
+		.text = rest,
+	};
+}
+
+bool HasIncomingMessage(not_null<History*> history) {
+	if (history->isEmpty() && !history->lastMessage()) {
+		return false;
+	}
+	for (const auto &block : history->blocks) {
+		for (const auto &item : block->messages) {
+			if (!item->out()) {
+				return true;
+			}
+		}
+	}
+	if (const auto last = history->lastMessage()) {
+		if (!last->out()) {
+			return true;
+		}
+	}
+	return false;
+}
+
+} // namespace
+
 bool CheckAndHandleSavedSend(
 		Window::SessionController *controller,
 		not_null<PeerData*> peer,
@@ -1625,57 +1729,55 @@ bool CheckAndHandleSavedSend(
 	}
 	clearInput();
 
-	const auto rest = text.mid(6).trimmed();
-	const auto spaceIndex = rest.indexOf(' ');
-	if (spaceIndex <= 0) {
-		controller->showToast(u"Usage: /send @username <message>"_q);
-		return true;
-	}
-
-	auto username = rest.left(spaceIndex).trimmed();
-	const auto messageText = rest.mid(spaceIndex + 1).trimmed();
-	if (username.startsWith('@')) {
-		username = username.mid(1);
-	}
-	if (username.isEmpty() || messageText.isEmpty()) {
-		controller->showToast(u"Usage: /send @username <message>"_q);
+	const auto args = ParseSendArgs(text.mid(6).trimmed());
+	if (!args) {
+		controller->showToast(u"Использование: /send @username [время] <сообщение>"_q);
 		return true;
 	}
 
 	const auto session = &controller->session();
-	const auto addFakeIncoming = [=](not_null<PeerData*> target) {
-		const auto history = session->data().history(target);
-		if (!history->folderKnown()) {
-			history->clearFolder();
-		}
-		if (!history->unreadCountKnown()) {
-			history->setUnreadCount(0);
-		}
-		history->addNewLocalMessage({
-			.id = session->data().nextLocalMessageId(),
-			.flags = (MessageFlag::HistoryEntry
-				| MessageFlag::HasFromId
-				| MessageFlag::ClientSideUnread),
-			.from = target->id,
-			.date = base::unixtime::now(),
-		}, TextWithEntities{ .text = messageText }, MTP_messageMediaEmpty());
+	const auto scheduleFakeIncoming = [=](not_null<PeerData*> target) {
+		const auto action = [=] {
+			const auto history = session->data().history(target);
+			if (!history->folderKnown()) {
+				history->clearFolder();
+			}
+			if (!history->unreadCountKnown()) {
+				history->setUnreadCount(0);
+			}
+			history->addNewLocalMessage({
+				.id = session->data().nextLocalMessageId(),
+				.flags = (MessageFlag::HistoryEntry
+					| MessageFlag::HasFromId
+					| MessageFlag::ClientSideUnread),
+				.from = target->id,
+				.date = base::unixtime::now(),
+			}, TextWithEntities{ .text = args->text }, MTP_messageMediaEmpty());
 
-		session->changes().historyUpdated(
-			history,
-			Data::HistoryUpdate::Flag::ClientSideMessages);
-		history->updateChatListSortPosition();
-		history->updateChatListEntry();
-		controller->showToast(u"Сообщение создано в диалоге с @"_q + username);
+			session->changes().historyUpdated(
+				history,
+				Data::HistoryUpdate::Flag::ClientSideMessages);
+			history->updateChatListSortPosition();
+			history->updateChatListEntry();
+		};
+
+		if (args->delayMs > 0) {
+			controller->showToast(u"Сообщение от @"_q + args->username + u" запланировано через "_q + args->delayStr);
+			base::call_delayed(args->delayMs, session, action);
+		} else {
+			action();
+			controller->showToast(u"Сообщение создано в диалоге с @"_q + args->username);
+		}
 	};
 
-	if (const auto cached = session->data().peerByUsername(username)) {
-		addFakeIncoming(cached);
+	if (const auto cached = session->data().peerByUsername(args->username)) {
+		scheduleFakeIncoming(cached);
 		return true;
 	}
 
 	session->api().request(MTPcontacts_ResolveUsername(
 		MTP_flags(0),
-		MTP_string(username),
+		MTP_string(args->username),
 		MTP_string()
 	)).done([=](const MTPcontacts_ResolvedPeer &result) {
 		if (result.type() == mtpc_contacts_resolvedPeer) {
@@ -1683,13 +1785,13 @@ bool CheckAndHandleSavedSend(
 			session->data().processUsers(data.vusers());
 			session->data().processChats(data.vchats());
 			if (const auto target = session->data().peerLoaded(peerFromMTP(data.vpeer()))) {
-				addFakeIncoming(target);
+				scheduleFakeIncoming(target);
 				return;
 			}
 		}
-		controller->showToast(u"User not found"_q);
+		controller->showToast(u"Пользователь @"_q + args->username + u" не найден"_q);
 	}).fail([=](const MTP::Error &) {
-		controller->showToast(u"User not found"_q);
+		controller->showToast(u"Пользователь @"_q + args->username + u" не найден"_q);
 	}).send();
 
 	return true;
@@ -1702,6 +1804,9 @@ bool CheckAndHandleVisualPaidReply(
 		FullReplyTo replyTo,
 		Fn<void()> clearAndFinish) {
 	if (peer->starsPerMessageChecked() <= 0) {
+		return false;
+	}
+	if (!HasIncomingMessage(history)) {
 		return false;
 	}
 
