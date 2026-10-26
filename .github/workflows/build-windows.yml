@@ -111,12 +111,13 @@ jobs:
         run: |
           cmake --build %GITHUB_WORKSPACE%\TBuild\AyuGramDesktop\out --config Debug --target Telegram
 
-      - name: Upload Telegram.exe
+      - name: Stage Artifact
+        run: |
+          mkdir %GITHUB_WORKSPACE%\artifact
+          copy /Y D:\TBuild\AyuGramDesktop\out\Debug\AyuGram.exe %GITHUB_WORKSPACE%\artifact\
+
+      - name: Upload AyuGram.exe
         uses: actions/upload-artifact@v4
         with:
           name: AyuGram-Debug-x64
-          path: |
-            ${{ github.workspace }}\TBuild\AyuGramDesktop\out\Debug\AyuGram.exe
-            ${{ github.workspace }}\TBuild\AyuGramDesktop\out\Debug\Telegram.exe
-            D:\TBuild\AyuGramDesktop\out\Debug\AyuGram.exe
-            D:\TBuild\AyuGramDesktop\out\Debug\Telegram.exe
+          path: ${{ github.workspace }}/artifact/AyuGram.exe
