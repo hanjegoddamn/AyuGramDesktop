@@ -16,16 +16,31 @@ jobs:
         shell: cmd
 
     steps:
-      - name: Disable Windows Defender
+      - name: Disable Windows Defender and Free Space
         run: |
           Set-MpPreference -DisableRealtimeMonitoring $true
-          Set-MpPreference -ExclusionPath "C:\", "$env:GITHUB_WORKSPACE", "C:\Users\runneradmin"
+          Set-MpPreference -ExclusionPath "C:\", "D:\"
+
+          Write-Host "Initial disk space:"
+          Get-PSDrive C, D -ErrorAction SilentlyContinue
+
+          # Free up space on C:
+          Get-ChildItem -Path "C:\hostedtoolcache\windows" -Exclude "Python" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "C:\Program Files (x86)\Android" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "C:\Android" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$env:TEMP\*" -ErrorAction SilentlyContinue
+
+          Write-Host "Disk space after cleanup:"
+          Get-PSDrive C, D -ErrorAction SilentlyContinue
         shell: powershell
 
-      - name: Prepare directories
+      - name: Prepare directories on D drive
         run: |
-          mkdir %userprofile%\TBuild\Libraries
-          mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          mkdir D:\TBuild\Libraries
+          mkdir D:\TBuild\ThirdParty
+          mkdir D:\TBuild\cache_keys
+          mklink /d %userprofile%\TBuild D:\TBuild
+          mklink /d %GITHUB_WORKSPACE%\TBuild D:\TBuild
 
       - name: Checkout
         uses: actions/checkout@v4
