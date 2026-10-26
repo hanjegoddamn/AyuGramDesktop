@@ -2632,6 +2632,7 @@ if (MSVC)
     target_link_libraries(Telegram
     PRIVATE
         delayimp
+        dnsapi
     )
     target_link_options(Telegram
     PRIVATE
@@ -2659,6 +2660,7 @@ if (MSVC)
         /DELAYLOAD:userenv.dll
         /DELAYLOAD:wtsapi32.dll
         /DELAYLOAD:propsys.dll
+        /DELAYLOAD:dnsapi.dll
     )
     if (QT_VERSION GREATER 6)
         if (NOT build_winarm)
