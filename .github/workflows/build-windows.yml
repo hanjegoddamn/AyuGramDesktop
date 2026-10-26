@@ -64,11 +64,15 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
+            D:/TBuild/Libraries/win64
+            D:/TBuild/ThirdParty
+            D:/TBuild/cache_keys
             C:/Users/runneradmin/TBuild/Libraries/win64
             C:/Users/runneradmin/TBuild/ThirdParty
             C:/Users/runneradmin/TBuild/cache_keys
-          key: ${{ runner.os }}-x64-tdesktop-libs-${{ hashFiles('**/Telegram/build/prepare/**') }}
+          key: ${{ runner.os }}-x64-tdesktop-libs-v2-${{ hashFiles('**/Telegram/build/prepare/**') }}
           restore-keys: |
+            ${{ runner.os }}-x64-tdesktop-libs-v2-
             ${{ runner.os }}-x64-tdesktop-libs-
 
       - name: Setup cache keys
@@ -90,10 +94,13 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
+            D:/TBuild/Libraries/win64
+            D:/TBuild/ThirdParty
+            D:/TBuild/cache_keys
             C:/Users/runneradmin/TBuild/Libraries/win64
             C:/Users/runneradmin/TBuild/ThirdParty
             C:/Users/runneradmin/TBuild/cache_keys
-          key: ${{ runner.os }}-x64-tdesktop-libs-${{ hashFiles('**/Telegram/build/prepare/**') }}
+          key: ${{ runner.os }}-x64-tdesktop-libs-v2-${{ hashFiles('**/Telegram/build/prepare/**') }}
 
       - name: Configure
         run: |
@@ -108,4 +115,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AyuGram-Debug-x64
-          path: ${{ github.workspace }}\TBuild\AyuGramDesktop\out\Debug\Telegram.exe
+          path: |
+            ${{ github.workspace }}\TBuild\AyuGramDesktop\out\Debug\AyuGram.exe
+            ${{ github.workspace }}\TBuild\AyuGramDesktop\out\Debug\Telegram.exe
+            D:\TBuild\AyuGramDesktop\out\Debug\AyuGram.exe
+            D:\TBuild\AyuGramDesktop\out\Debug\Telegram.exe
